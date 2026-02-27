@@ -72,8 +72,45 @@ def run():
     gh_summary = gh.collect()
     print_summary("github", gh_summary)
 
+    # ── arXiv ──────────────────────────────────
+    print("\n📄 arXiv")
+    from src.collectors.arxiv_collector import ArxivCollector
+    arxiv = ArxivCollector(engine=engine)
+    arxiv_result = arxiv.collect()
+    arxiv_summary = arxiv_result.get("thread_signals", {})
+    print_summary("arxiv", arxiv_summary)
+    if arxiv_result.get("curiosity_hits"):
+        print("  📌 Top curiosity hits:")
+        for h in arxiv_result["curiosity_hits"][:3]:
+            print(f"     • {h['title'][:70]}")
+
+    # ── Hacker News ────────────────────────────
+    print("\n🟠 Hacker News")
+    from src.collectors.hn_collector import HNCollector
+    hn = HNCollector(engine=engine)
+    hn_result = hn.collect()
+    hn_summary = hn_result.get("thread_signals", {})
+    print_summary("hackernews", hn_summary)
+    if hn_result.get("curiosity_hits"):
+        print("  📌 Top curiosity hits:")
+        for h in sorted(hn_result["curiosity_hits"][:3], key=lambda x: -x.get("score",0)):
+            print(f"     • [{h.get('type','')}] {h['title'][:70]}")
+
+    # ── Reddit ─────────────────────────────────
+    print("\n🔴 Reddit")
+    from src.collectors.reddit_collector import RedditCollector
+    reddit = RedditCollector(engine=engine)
+    reddit_result = reddit.collect()
+    reddit_summary = reddit_result.get("thread_signals", {})
+    print_summary("reddit", reddit_summary)
+    if reddit_result.get("curiosity_hits"):
+        print("  📌 Top curiosity hits:")
+        for h in sorted(reddit_result["curiosity_hits"][:3], key=lambda x: -x.get("score",0)):
+            print(f"     • [r/{h.get('subreddit','')}] {h['title'][:65]}")
+
     # ── Updated Belief States ──────────────────
-    all_touched = set(gmail_summary) | set(cal_summary) | set(gh_summary)
+    all_touched = set(gmail_summary) | set(cal_summary) | set(gh_summary) | \
+                  set(arxiv_summary) | set(hn_summary) | set(reddit_summary)
     if all_touched:
         print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         print("  Updated Belief States")
