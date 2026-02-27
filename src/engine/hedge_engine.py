@@ -261,9 +261,13 @@ class HedgeEngine:
                 urgency = hyp.probability * hyp.risk_weight
 
                 conn.execute("""
-                    INSERT OR REPLACE INTO next_actions
+                    INSERT OR IGNORE INTO next_actions
                         (thread_id, action_type, title, description, expected_utility, urgency_score, status)
-                    VALUES (?, ?, ?, ?, ?, ?, 'pending')
+                    SELECT ?, ?, ?, ?, ?, ?, 'pending'
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM next_actions
+                        WHERE thread_id = ? AND action_type = ? AND status = 'pending'
+                    )
                 """, (
                     thread["id"],
                     action["type"],
@@ -271,6 +275,8 @@ class HedgeEngine:
                     action["description"],
                     expected_utility,
                     urgency,
+                    thread["id"],
+                    action["type"],
                 ))
                 actions.append(action)
 
