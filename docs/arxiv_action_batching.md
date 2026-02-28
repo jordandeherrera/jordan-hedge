@@ -8,7 +8,7 @@ jordan@deherrera.dev
 
 ## Abstract
 
-Personal AI reasoning systems face a scheduling problem that production task managers ignore: actions across distinct strategic threads often share underlying research substrate, making sequential execution wasteful. We present a two-phase action batching architecture that (1) infers explicit *research topics* from the semantic context of each action using a structured inference layer, and (2) clusters actions by topic-first grouping before refining with embedding similarity. The system is built as an extension to the HEDGE framework (Hypothesis-Evidence-Driven-Graph-Evaluation), a Bayesian belief-state engine for personal and clinical reasoning. We show that explicit topic inference consistently identifies cross-domain batch opportunities that embedding-only clustering misses, while a principled economics model—accounting for per-topic coordination cost and cross-domain synthesis overhead—prevents over-batching. The implementation uses neural embeddings (Voyage voyage-3-lite) with a TF-IDF fallback and integrates with SQLite-backed belief state persistence. Across 38 pending actions spanning 13 active threads, the system surfaces 3 high-confidence batch opportunities and correctly identifies 4 urgent-solo clusters that should not wait for batch assembly, with a net estimated effort saving of ~1.1 normalized work units.
+Personal AI reasoning systems face a scheduling problem that production task managers ignore: actions across distinct strategic threads often share underlying research substrate, making sequential execution wasteful. We present a two-phase action batching architecture that (1) infers explicit *research topics* from the semantic context of each action using a structured inference layer, and (2) clusters actions by topic-first grouping before refining with embedding similarity. The system is built as an extension to the HEDGE framework (Hypothesis-Evidence-Driven-Graph-Evaluation), a Bayesian belief-state engine for personal and clinical reasoning. We show that explicit topic inference consistently identifies cross-domain batch opportunities that embedding-only clustering misses, while a principled economics model—accounting for per-topic coordination cost and cross-domain synthesis overhead—prevents over-batching. The implementation uses neural embeddings (Voyage voyage-3-lite) with a TF-IDF fallback and integrates with SQLite-backed belief state persistence. Evaluated on 38 pending actions spanning 13 active threads across 7 domains (legal, finance, health, two product domains, an open-source project, and an employer context), the system surfaces 3 high-confidence batch opportunities and correctly identifies 4 urgent-solo clusters that should not wait for batch assembly, with a net estimated effort saving of ~1.1 normalized work units.
 
 ---
 
@@ -159,25 +159,43 @@ The `recommend()` function applies this check as a priority-zero rule before eva
 
 ## 5. Results
 
-Evaluated against 38 pending actions across 13 active threads spanning 7 domains (estate, malpractice, MEL, advocate, ridgeline, health, finance, hedge).
+Evaluated against 38 pending actions across 13 active threads spanning 7 domains. Threads are labeled Thread-A through Thread-M; domain labels are generalized to preserve anonymity while retaining structural properties relevant to the evaluation.
+
+**Thread inventory:**
+
+| Thread | Domain | Research Topic | Description |
+|---|---|---|---|
+| Thread-A | product-alpha | `competitive_landscape` | AI product focused on automating insurance prior authorization |
+| Thread-B | product-beta | `competitive_landscape` | Patient-side navigation platform for insurance appeals |
+| Thread-C | product-alpha | `infrastructure_ops` | Cloud deployment and infrastructure for product-alpha |
+| Thread-D | product-alpha | `clinical_literature` | Clinical ontology quality for product-alpha's reasoning layer |
+| Thread-E | legal | `legal_proceedings` | Estate administration: asset inventory and court deadline |
+| Thread-F | legal | `legal_proceedings` | Estate administration: fraud investigation |
+| Thread-G | legal | `legal_proceedings` | Insurance policy investigation for estate |
+| Thread-H | legal | `legal_proceedings` | Medical malpractice proceedings |
+| Thread-I | finance | `financial_modeling` | Insurance benefits optimization |
+| Thread-J | health | `personal_health` | Musculoskeletal injury recovery decision |
+| Thread-K | oss | `knowledge_capture` | Open-source release of core reasoning framework |
+| Thread-L | employer | `technical_architecture` | Enterprise knowledge graph product |
+| Thread-M | employer | `product_strategy` | Career advancement strategy |
 
 ### 5.1 Routing Summary
 
 | Recommendation | Clusters | Actions | Notes |
 |---|---|---|---|
-| `urgent_solo` | 4 | 24 | Legal proceedings, MEL deployment, healthcare benefits, meniscus recovery |
-| `batch` | 3 | 8 | Clinical literature, knowledge capture, technical architecture |
-| `individual` | 2 | 6 | Competitive landscape (cross-domain penalty tips negative), product strategy |
+| `urgent_solo` | 4 | 24 | Legal (Threads E–H), infrastructure ops (Thread-C), financial (Thread-I), personal health (Thread-J) |
+| `batch` | 3 | 8 | Clinical literature (Thread-D), knowledge capture (Thread-K), technical architecture (Thread-L) |
+| `individual` | 2 | 6 | Competitive landscape (Threads A+B, cross-domain penalty tips negative), product strategy (Thread-M) |
 
 ### 5.2 Key Findings
 
-**Topic inference resolves cross-domain substrate that embeddings miss.** "MEL Prior Auth Voice Agent" and "Advocate — Patient Navigation AI" were correctly grouped under `competitive_landscape` by the topic inference layer. Prior to this change, embedding-only clustering kept them in separate clusters because their thread descriptions and domain context dominated the embedding signal.
+**Topic inference resolves cross-domain substrate that embeddings miss.** Thread-A (prior authorization automation, domain: product-alpha) and Thread-B (patient navigation, domain: product-beta) were correctly grouped under `competitive_landscape` by the topic inference layer. Both threads require the same competitive research—who else is building AI for insurance prior authorization—despite belonging to different product domains with different vocabularies. Prior to topic inference, embedding-only clustering kept them in separate clusters because their thread descriptions and domain context dominated the embedding signal.
 
-**Legal proceedings consolidation.** 15 actions across 4 distinct legal threads (estate inventory, estate fraud, MetLife investigation, medical malpractice) were consolidated into a single `urgent_solo` cluster. Without topic-first grouping, these formed 4 separate clusters with fragmented rationales. The consolidated view correctly signals: "all your legal threads need coordinated attention now."
+**Legal proceedings consolidation.** 15 actions across 4 distinct legal threads (Threads E, F, G, H) spanning two domain contexts (estate administration and malpractice proceedings) were consolidated into a single `urgent_solo` cluster. Without topic-first grouping, these formed 4 separate clusters with fragmented rationales. The consolidated view correctly signals: all legal threads require coordinated attention under time pressure.
 
-**Economics model correctly rejects marginal cross-domain batches.** The `competitive_landscape` cluster (Advocate + MEL Prior Auth) routes `individual` because coordination cost (0.9, including cross-domain synthesis overhead) exceeds net savings (-1.0). This is correct: the research is shared, but the decision contexts are sufficiently different that the synthesis step is non-trivial. As more competitive research actions accumulate (~3 per thread), the batch savings will exceed coordination cost and the recommendation will flip to `batch`.
+**Economics model correctly rejects marginal cross-domain batches.** The `competitive_landscape` cluster (Threads A and B) routes `individual` because coordination cost (0.9, including cross-domain synthesis overhead) exceeds estimated net savings (-1.0). This is correct: the research substrate is shared, but the decision contexts diverge after the research step—Thread-A's decision is about product architecture, Thread-B's is about go-to-market entity structure. The synthesis overhead term correctly prices in this divergence. As more competitive research actions accumulate on each thread (~3 per thread is the empirically estimated flip point), batch savings will exceed coordination cost and the recommendation will flip to `batch`.
 
-**Two-phase approach outperforms embedding-only on recall.** With embedding-only clustering (prior implementation), 38 actions produced 13 clusters; with two-phase, 9 clusters—a 31% reduction. More importantly, the cluster quality improved: same-topic actions that were embedding-distant (due to different thread vocabulary) are now correctly grouped, while superficially similar actions with different decision contexts are correctly separated.
+**Two-phase approach outperforms embedding-only on recall.** With embedding-only clustering (prior implementation), 38 actions produced 13 clusters; with two-phase, 9 clusters—a 31% reduction. More importantly, cluster quality improved: same-topic actions that were embedding-distant due to different thread vocabulary are now correctly grouped (Threads E–H under legal proceedings), while superficially similar actions with different decision contexts are correctly separated (Thread-K knowledge capture isolated from Thread-L technical architecture, despite both living in the broader product development space).
 
 ---
 
@@ -191,7 +209,7 @@ In practice, the taxonomy has been stable across 13 threads spanning 7 domains. 
 
 ### 6.2 The Synthesis Overhead Calibration Problem
 
-The cross-domain synthesis overhead ($\delta_s = 0.25$ per extra domain) is a calibrated constant. The correct value depends on how different the decision contexts are—a `competitive_landscape` batch combining two healthcare AI products has lower synthesis overhead than one combining a healthcare AI product and an open-source framework release. Future work could make $\delta_s$ a function of inter-domain embedding distance, allowing the economics model to be more precise about which cross-domain batches are genuinely cheap to synthesize.
+The cross-domain synthesis overhead ($\delta_s = 0.25$ per extra domain) is a calibrated constant. The correct value depends on how different the decision contexts are—a `competitive_landscape` batch combining two products in the same vertical (e.g., Threads A and B, both in healthcare insurance automation) has lower synthesis overhead than one combining a product-domain thread with an open-source release thread, where the research is nominally shared but the apply step is entirely different. Future work could make $\delta_s$ a function of inter-domain embedding distance, allowing the economics model to be more precise about which cross-domain batches are genuinely cheap to synthesize.
 
 ### 6.3 Relation to Prior Work
 
