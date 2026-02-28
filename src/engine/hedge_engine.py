@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
 from .db import get_connection, logit_to_prob, prob_to_logit, belief_entropy, uncertainty
+from .topic_inference import infer_topic
 from .hypothesis_validator import (
     HypothesisValidator,
     HypothesisValidationError,
@@ -329,10 +330,26 @@ class HedgeEngine:
                 expected_utility = hyp.probability * hyp.risk_weight * (1.0 - hyp.uncertainty * 0.5)
                 urgency = hyp.probability * hyp.risk_weight
 
+                # Infer research topic from domain × hypothesis type × action type
+                import json as _json
+                _meta = {}
+                try:
+                    _meta = _json.loads(thread["metadata"] or "{}")
+                except Exception:
+                    pass
+                research_topic = infer_topic(
+                    domain=thread["domain"],
+                    hypothesis_type=hyp.hypothesis_type,
+                    action_type=action["type"],
+                    thread_name=thread["name"],
+                    thread_metadata=_meta,
+                )
+
                 conn.execute("""
                     INSERT OR IGNORE INTO next_actions
-                        (thread_id, action_type, title, description, expected_utility, urgency_score, status)
-                    SELECT ?, ?, ?, ?, ?, ?, 'pending'
+                        (thread_id, action_type, title, description,
+                         expected_utility, urgency_score, status, research_topic)
+                    SELECT ?, ?, ?, ?, ?, ?, 'pending', ?
                     WHERE NOT EXISTS (
                         SELECT 1 FROM next_actions
                         WHERE thread_id = ? AND action_type = ? AND status = 'pending'
@@ -344,6 +361,7 @@ class HedgeEngine:
                     action["description"],
                     expected_utility,
                     urgency,
+                    research_topic,
                     thread["id"],
                     action["type"],
                 ))
@@ -516,6 +534,74 @@ class HedgeEngine:
         }
 
         return templates.get(h)
+
+    # ─────────────────────────────────────────────
+    # RESEARCH TOPIC BACKFILL
+    # ─────────────────────────────────────────────
+
+    def backfill_research_topics(self) -> int:
+        """
+        Backfill research_topic on existing pending actions that have NULL or
+        default 'product_strategy' values. Safe to call repeatedly.
+        Returns the number of rows updated.
+        """
+        import json as _json
+        conn = self._conn()
+        try:
+            rows = conn.execute("""
+                SELECT
+                    na.id,
+                    na.action_type,
+                    na.research_topic,
+                    t.domain,
+                    t.name   AS thread_name,
+                    t.metadata,
+                    h.name   AS hypothesis_type
+                FROM next_actions na
+                JOIN threads t ON t.id = na.thread_id
+                LEFT JOIN (
+                    -- Best matching hypothesis: highest probability for this thread
+                    SELECT h2.thread_id, c.name
+                    FROM hypotheses h2
+                    JOIN concepts c ON c.id = h2.hypothesis_type_id
+                    WHERE h2.status = 'active'
+                    GROUP BY h2.thread_id
+                    HAVING MAX(logit_to_prob(h2.log_odds_posterior) * c.risk_weight)
+                ) h ON h.thread_id = na.thread_id
+                WHERE na.status = 'pending'
+            """).fetchall()
+
+            updated = 0
+            for r in rows:
+                meta = {}
+                try:
+                    meta = _json.loads(r["metadata"] or "{}")
+                except Exception:
+                    pass
+                topic = infer_topic(
+                    domain=r["domain"],
+                    hypothesis_type=r["hypothesis_type"] or "",
+                    action_type=r["action_type"],
+                    thread_name=r["thread_name"],
+                    thread_metadata=meta,
+                )
+                if topic != (r["research_topic"] or "product_strategy"):
+                    conn.execute(
+                        "UPDATE next_actions SET research_topic = ? WHERE id = ?",
+                        (topic, r["id"])
+                    )
+                    updated += 1
+                elif r["research_topic"] is None:
+                    conn.execute(
+                        "UPDATE next_actions SET research_topic = ? WHERE id = ?",
+                        (topic, r["id"])
+                    )
+                    updated += 1
+
+            conn.commit()
+            return updated
+        finally:
+            conn.close()
 
     # ─────────────────────────────────────────────
     # HEALTH CHECK

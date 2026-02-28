@@ -75,23 +75,23 @@ def main():
             continue
 
         top = thread.top_hypothesis
-        top_label = f"{top.label} ({top.probability:.0%})" if top else "unknown"
+        top_label = f"{top.hypothesis_type} ({top.probability:.0%})" if top else "unknown"
 
         actions = thread.next_actions[:1]
         action_text = f" → {actions[0]['description']}" if actions else ""
 
         msg = (
-            f"[Jordan HEDGE] 🔔 {thread.thread_name} | "
+            f"[Jordan HEDGE] 🔔 {thread.name} | "
             f"priority: {thread.priority_score:.2f} | "
             f"top hypothesis: {top_label}{action_text}"
         )
 
         if fire_system_event(msg):
             state[thread.thread_id] = now
-            pushed.append(thread.thread_name)
-            print(f"Pushed: {thread.thread_name}")
+            pushed.append(thread.name)
+            print(f"Pushed: {thread.name}")
         else:
-            print(f"Failed to push: {thread.thread_name}", file=sys.stderr)
+            print(f"Failed to push: {thread.name}", file=sys.stderr)
 
     save_state(state)
 

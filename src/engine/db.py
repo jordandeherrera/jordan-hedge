@@ -8,6 +8,20 @@ import math
 import os
 from pathlib import Path
 
+# Auto-load .env from repo root so VOYAGE_API_KEY and other secrets are always available
+_repo_root = Path(__file__).parent.parent.parent
+_env_file = _repo_root / ".env"
+if _env_file.exists():
+    try:
+        from dotenv import load_dotenv as _load_dotenv
+        _load_dotenv(_env_file, override=False)
+    except ImportError:
+        for _line in _env_file.read_text().splitlines():
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 DB_PATH = os.environ.get("JORDAN_HEDGE_DB", str(Path(__file__).parent.parent.parent / "jordan_hedge.db"))
 
 

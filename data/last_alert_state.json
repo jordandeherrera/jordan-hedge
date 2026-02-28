@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-02-27T11:31:00-08:00",
+  "threads": {
+    "Medical Malpractice — Renown": {"URGENT_ACTION_NEEDED": 1.0, "AT_RISK": 1.0},
+    "MEL Cloud Deployment": {"URGENT_ACTION_NEEDED": 1.0, "AT_RISK": 0.0},
+    "UnitedHealthcare Benefits Optimization": {"URGENT_ACTION_NEEDED": 1.0, "AT_RISK": 0.0},
+    "Estate Inventory Deadline": {"AT_RISK": 0.96},
+    "Estate Fraud Investigation": {"AT_RISK": 0.99},
+    "MetLife Policy Investigation": {"AT_RISK": 0.98},
+    "MEL Ontology Quality": {"BINDING_CONSTRAINT": 0.86},
+    "Meniscus Tear Recovery": {"DECISION_PENDING": 0.85},
+    "Ridgeline L6 Promotion": {"STALE_THREAD": 0.95}
+  },
+  "alerted": true,
+  "alert_failed": "no WhatsApp contact E.164 for Jordan"
+}

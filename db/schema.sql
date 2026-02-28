@@ -200,3 +200,22 @@ BEGIN
         updated_at = CURRENT_TIMESTAMP
     WHERE id = NEW.thread_id;
 END;
+
+-- ─────────────────────────────────────────────
+-- ACTION EMBEDDING CACHE
+-- Stores pre-computed embeddings for next_actions to avoid redundant API calls.
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS action_embeddings (
+    action_id  INTEGER PRIMARY KEY,
+    embedding  BLOB NOT NULL,           -- numpy float32 array as raw bytes
+    model      TEXT DEFAULT 'tfidf',    -- 'tfidf' | 'voyage-3-lite' | etc.
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(action_id) REFERENCES next_actions(id) ON DELETE CASCADE
+);
+
+-- ─────────────────────────────────────────────
+-- RESEARCH TOPIC on next_actions
+-- Added in migration 002.
+-- ─────────────────────────────────────────────
+-- ALTER TABLE next_actions ADD COLUMN research_topic TEXT DEFAULT 'product_strategy';
+-- (handled in migration script, not here, since ALTER TABLE is idempotent-unsafe in SQLite)
