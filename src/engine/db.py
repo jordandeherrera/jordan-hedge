@@ -77,8 +77,42 @@ def get_connection(db_path: str = None) -> sqlite3.Connection:
 def initialize_db(db_path: str = None) -> sqlite3.Connection:
     """Initialize database schema if not already present."""
     conn = get_connection(db_path)
+    # Run incremental migrations first — adds columns to existing tables
+    # before schema.sql's CREATE TABLE IF NOT EXISTS runs (which is a no-op
+    # for existing tables and won't pick up new column definitions).
+    run_migrations(conn)
     schema_path = Path(__file__).parent.parent.parent / "db" / "schema.sql"
     with open(schema_path) as f:
         conn.executescript(f.read())
     conn.commit()
     return conn
+
+
+def run_migrations(conn: sqlite3.Connection) -> None:
+    """
+    Apply incremental migrations from db/migrations/*.sql in filename order.
+    Each migration is applied once; errors on already-applied DDL (e.g.
+    duplicate column) are silently swallowed.
+    """
+    migrations_dir = Path(__file__).parent.parent.parent / "db" / "migrations"
+    if not migrations_dir.exists():
+        return
+
+    for migration_file in sorted(migrations_dir.glob("*.sql")):
+        with open(migration_file) as f:
+            raw = f.read()
+        import re as _re
+        raw = _re.sub(r'--[^\n]*', '', raw)   # strip inline comments before splitting
+        statements = [s.strip() for s in raw.split(";") if s.strip()]
+        for stmt in statements:
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError as e:
+                # Ignore "duplicate column" and "already exists" errors —
+                # these mean the migration was already applied.
+                msg = str(e).lower()
+                if "duplicate column" in msg or "already exists" in msg:
+                    pass
+                else:
+                    raise
+    conn.commit()

@@ -63,7 +63,7 @@ class GitHubCollector:
                     seen.add(s.signal_name)
 
             if unique:
-                count = self.engine.ingest_signals(thread_name, unique)
+                count = (self.engine.ingest_signals(thread_name, unique) or {}).get("processed", 0)
                 self.engine.generate_actions(thread_name)
                 summary[thread_name] = {
                     "signals": [s.signal_name for s in unique],

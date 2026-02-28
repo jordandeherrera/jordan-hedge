@@ -54,7 +54,7 @@ class GmailCollector:
         for config in THREAD_CONFIGS:
             signals = self._collect_for_thread(config)
             if signals:
-                count = self.engine.ingest_signals(config.thread_name, signals)
+                count = (self.engine.ingest_signals(config.thread_name, signals) or {}).get("processed", 0)
                 summary[config.thread_name] = {
                     "signals": [s.signal_name for s in signals],
                     "ingested": count,

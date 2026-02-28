@@ -108,7 +108,7 @@ class ArxivCollector:
             seen_sigs = set()
             unique = [s for s in signals if s.signal_name not in seen_sigs and not seen_sigs.add(s.signal_name)]
             if unique:
-                count = self.engine.ingest_signals(thread_name, unique)
+                count = (self.engine.ingest_signals(thread_name, unique) or {}).get("processed", 0)
                 self.engine.generate_actions(thread_name)
                 summary[thread_name] = {"signals": [s.signal_name for s in unique], "ingested": count}
 

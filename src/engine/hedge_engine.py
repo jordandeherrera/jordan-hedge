@@ -11,6 +11,15 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Optional
 from .db import get_connection, logit_to_prob, prob_to_logit, belief_entropy, uncertainty
+from .hypothesis_validator import (
+    HypothesisValidator,
+    HypothesisValidationError,
+    EvidenceAnomalySignal,
+    check_signal_impact,
+    DEFAULT_LLR_SUPPORT_THRESHOLD,
+    DEFAULT_LLR_CONTRADICT_THRESHOLD,
+    DEFAULT_MIN_EVIDENCE_COUNT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +46,27 @@ class HypothesisResult:
     status: str
     last_evidence_at: Optional[str]
     risk_weight: float
+    # Phase 5: threshold fields (None = defaults applied)
+    llr_support_threshold: Optional[float] = None
+    llr_contradict_threshold: Optional[float] = None
+    min_evidence_count: int = DEFAULT_MIN_EVIDENCE_COUNT
+    validation_warnings: Optional[list] = None
+
+    @property
+    def resolution_state(self) -> str:
+        """
+        Derived resolution state based on thresholds:
+          'supported'    — posterior >= llr_support_threshold
+          'contradicted' — posterior <= llr_contradict_threshold
+          'open'         — neither threshold reached
+        """
+        support    = self.llr_support_threshold    or DEFAULT_LLR_SUPPORT_THRESHOLD
+        contradict = self.llr_contradict_threshold or DEFAULT_LLR_CONTRADICT_THRESHOLD
+        if self.log_odds_posterior >= support:
+            return 'supported'
+        if self.log_odds_posterior <= contradict:
+            return 'contradicted'
+        return 'open'
 
 
 @dataclass
@@ -83,21 +113,36 @@ class HedgeEngine:
     # SIGNAL INGESTION
     # ─────────────────────────────────────────────
 
-    def ingest_signals(self, thread_name: str, signals: list[SignalItem]) -> int:
+    def ingest_signals(
+        self,
+        thread_name: str,
+        signals: list[SignalItem],
+    ) -> dict:
         """
         Ingest evidence signals for a thread.
         SQLite trigger automatically updates hypotheses on fact insert.
-        Returns number of facts processed.
+
+        Phase 5: before each insert, checks whether the signal has any
+        meaningful LLR impact on the active hypothesis set. Signals with
+        near-zero impact are surfaced as EvidenceAnomalySignals — the
+        curiosity loop signal indicating a hypothesis set gap.
+
+        Returns:
+            {
+                "processed": int,
+                "anomalies": list[EvidenceAnomalySignal],
+            }
         """
         conn = self._conn()
         try:
             thread = self._get_thread(conn, thread_name)
             if not thread:
                 logger.warning(f"[HedgeEngine] Thread not found: {thread_name}")
-                return 0
+                return {"processed": 0, "anomalies": []}
 
             thread_id = thread["id"]
             processed = 0
+            anomalies: list[EvidenceAnomalySignal] = []
 
             for signal in signals:
                 concept = self._resolve_concept(conn, signal.signal_name)
@@ -106,6 +151,20 @@ class HedgeEngine:
                     continue
 
                 observed_at = signal.observed_at or datetime.now(timezone.utc).isoformat()
+
+                # ── Phase 5: curiosity loop anomaly check ────────────────────
+                anomaly = check_signal_impact(
+                    conn=conn,
+                    thread_id=thread_id,
+                    thread_name=thread_name,
+                    concept_id=concept["id"],
+                    signal_name=signal.signal_name,
+                    value=signal.value,
+                )
+                if anomaly:
+                    anomalies.append(anomaly)
+                    logger.warning(f"[HedgeEngine] Anomaly: {anomaly.message}")
+                # ─────────────────────────────────────────────────────────────
 
                 conn.execute("""
                     INSERT OR REPLACE INTO facts
@@ -122,17 +181,27 @@ class HedgeEngine:
                 ))
                 processed += 1
 
-            # Update thread last_activity_at
-            conn.execute("""
-                UPDATE threads SET last_activity_at = ? WHERE id = ?
-            """, (datetime.now(timezone.utc).isoformat(), thread_id))
-
+            conn.execute(
+                "UPDATE threads SET last_activity_at = ? WHERE id = ?",
+                (datetime.now(timezone.utc).isoformat(), thread_id)
+            )
             conn.commit()
-            logger.info(f"[HedgeEngine] Ingested {processed} signals for thread '{thread_name}'")
-            return processed
+
+            msg = f"[HedgeEngine] Ingested {processed} signals for thread '{thread_name}'"
+            if anomalies:
+                msg += f", {len(anomalies)} anomaly signal(s) detected"
+            logger.info(msg)
+
+            self._last_anomalies = anomalies  # available via last_anomalies property
+            return {"processed": processed, "anomalies": anomalies}
 
         finally:
             conn.close()
+
+    @property
+    def last_anomalies(self) -> list[EvidenceAnomalySignal]:
+        """Anomalies from the most recent ingest_signals call."""
+        return getattr(self, '_last_anomalies', [])
 
     # ─────────────────────────────────────────────
     # HYPOTHESIS RETRIEVAL
@@ -306,7 +375,7 @@ class HedgeEngine:
             ).fetchone()
         return row
 
-    def _get_hypotheses(self, conn, thread_id: int) -> list[HypothesisResult]:
+    def _get_hypotheses(self, conn, thread_id: int, status: str = 'active') -> list[HypothesisResult]:
         rows = conn.execute("""
             SELECT
                 h.*,
@@ -317,9 +386,9 @@ class HedgeEngine:
                 uncertainty(h.log_odds_posterior) as uncertainty_score
             FROM hypotheses h
             JOIN concepts c ON c.id = h.hypothesis_type_id
-            WHERE h.thread_id = ? AND h.status = 'active'
+            WHERE h.thread_id = ? AND h.status = ?
             ORDER BY logit_to_prob(h.log_odds_posterior) * c.risk_weight DESC
-        """, (thread_id,)).fetchall()
+        """, (thread_id, status)).fetchall()
 
         return [HypothesisResult(
             hypothesis_type=row["hypothesis_type"],
@@ -330,7 +399,59 @@ class HedgeEngine:
             status=row["status"],
             last_evidence_at=row["last_evidence_at"],
             risk_weight=row["risk_weight"],
+            llr_support_threshold=row["llr_support_threshold"],
+            llr_contradict_threshold=row["llr_contradict_threshold"],
+            min_evidence_count=row["min_evidence_count"] or DEFAULT_MIN_EVIDENCE_COUNT,
+            validation_warnings=json.loads(row["validation_warnings"]) if row["validation_warnings"] else None,
         ) for row in rows]
+
+    def get_resolved_hypotheses(self, thread_name: str) -> list[HypothesisResult]:
+        """
+        Phase 5: Return hypotheses that have crossed a resolution threshold
+        (supported or contradicted). Used to surface converged belief states.
+        """
+        conn = self._conn()
+        try:
+            thread = self._get_thread(conn, thread_name)
+            if not thread:
+                return []
+
+            rows = conn.execute(f"""
+                SELECT
+                    h.*,
+                    c.name as hypothesis_type,
+                    c.risk_weight,
+                    logit_to_prob(h.log_odds_posterior) as probability,
+                    belief_entropy(h.log_odds_posterior) as entropy,
+                    uncertainty(h.log_odds_posterior) as uncertainty_score
+                FROM hypotheses h
+                JOIN concepts c ON c.id = h.hypothesis_type_id
+                WHERE h.thread_id = ?
+                  AND h.status = 'active'
+                  AND (
+                    h.log_odds_posterior >= COALESCE(h.llr_support_threshold, {DEFAULT_LLR_SUPPORT_THRESHOLD})
+                    OR
+                    h.log_odds_posterior <= COALESCE(h.llr_contradict_threshold, {DEFAULT_LLR_CONTRADICT_THRESHOLD})
+                  )
+                ORDER BY ABS(h.log_odds_posterior) DESC
+            """, (thread["id"],)).fetchall()
+
+            return [HypothesisResult(
+                hypothesis_type=row["hypothesis_type"],
+                probability=row["probability"],
+                log_odds_posterior=row["log_odds_posterior"],
+                entropy=row["entropy"],
+                uncertainty=row["uncertainty_score"],
+                status=row["status"],
+                last_evidence_at=row["last_evidence_at"],
+                risk_weight=row["risk_weight"],
+                llr_support_threshold=row["llr_support_threshold"],
+                llr_contradict_threshold=row["llr_contradict_threshold"],
+                min_evidence_count=row["min_evidence_count"] or DEFAULT_MIN_EVIDENCE_COUNT,
+                validation_warnings=json.loads(row["validation_warnings"]) if row["validation_warnings"] else None,
+            ) for row in rows]
+        finally:
+            conn.close()
 
     def _get_next_actions(self, conn, thread_id: int) -> list[dict]:
         rows = conn.execute("""

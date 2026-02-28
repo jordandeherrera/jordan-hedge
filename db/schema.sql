@@ -84,16 +84,21 @@ CREATE INDEX IF NOT EXISTS idx_threads_priority ON threads(priority_score DESC);
 
 -- Hypotheses: belief state per (thread × hypothesis_type)
 CREATE TABLE IF NOT EXISTS hypotheses (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    thread_id           INTEGER NOT NULL,
-    hypothesis_type_id  INTEGER NOT NULL,   -- FK to concepts where type='hypothesis_type'
-    log_odds_prior      REAL NOT NULL,
-    log_odds_posterior  REAL NOT NULL,
-    alpha               REAL DEFAULT 1.0,   -- supporting evidence count (Beta distribution)
-    beta                REAL DEFAULT 1.0,   -- contradicting evidence count
-    status              TEXT DEFAULT 'active',   -- 'active' | 'confirmed' | 'dismissed'
-    last_evidence_at    TIMESTAMP,
-    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id                INTEGER NOT NULL,
+    hypothesis_type_id       INTEGER NOT NULL,   -- FK to concepts where type='hypothesis_type'
+    log_odds_prior           REAL NOT NULL,
+    log_odds_posterior       REAL NOT NULL,
+    alpha                    REAL DEFAULT 1.0,   -- supporting evidence count (Beta distribution)
+    beta                     REAL DEFAULT 1.0,   -- contradicting evidence count
+    status                   TEXT DEFAULT 'active',   -- 'active' | 'confirmed' | 'dismissed'
+    last_evidence_at         TIMESTAMP,
+    updated_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Phase 5: validation thresholds (NULL = use defaults: support=+3.0, contradict=-3.0)
+    llr_support_threshold    REAL    DEFAULT NULL,
+    llr_contradict_threshold REAL    DEFAULT NULL,
+    min_evidence_count       INTEGER DEFAULT 1,
+    validation_warnings      TEXT    DEFAULT NULL,  -- JSON array of non-blocking warnings
     UNIQUE(thread_id, hypothesis_type_id),
     FOREIGN KEY(thread_id)          REFERENCES threads(id),
     FOREIGN KEY(hypothesis_type_id) REFERENCES concepts(id)
@@ -101,6 +106,12 @@ CREATE TABLE IF NOT EXISTS hypotheses (
 
 CREATE INDEX IF NOT EXISTS idx_hypotheses_thread ON hypotheses(thread_id, status);
 CREATE INDEX IF NOT EXISTS idx_hypotheses_updated ON hypotheses(updated_at DESC);
+-- Phase 5: resolution and gap-detection indexes
+CREATE INDEX IF NOT EXISTS idx_hypotheses_thresholds
+    ON hypotheses(thread_id, llr_support_threshold, llr_contradict_threshold);
+CREATE INDEX IF NOT EXISTS idx_hypotheses_missing_thresholds
+    ON hypotheses(thread_id)
+    WHERE llr_support_threshold IS NULL OR llr_contradict_threshold IS NULL;
 
 -- ─────────────────────────────────────────────
 -- ACTION LAYER
