@@ -1,137 +1,807 @@
 {
-  "concepts": [
-    
-    {"name": "URGENT_ACTION_NEEDED",  "type": "hypothesis_type", "base_rate": 0.15, "risk_weight": 3.0, "description": "This thread requires immediate action by Jordan"},
-    {"name": "BINDING_CONSTRAINT",   "type": "hypothesis_type", "base_rate": 0.10, "risk_weight": 2.5, "description": "This thread is the bottleneck blocking progress on other things"},
-    {"name": "AT_RISK",              "type": "hypothesis_type", "base_rate": 0.15, "risk_weight": 2.0, "description": "This thread is at risk of a bad outcome without intervention"},
-    {"name": "STALE_THREAD",         "type": "hypothesis_type", "base_rate": 0.30, "risk_weight": 0.5, "description": "This thread has had no activity and may need attention or closure"},
-    {"name": "OPPORTUNITY",          "type": "hypothesis_type", "base_rate": 0.10, "risk_weight": 1.5, "description": "This thread presents an actionable opportunity"},
-    {"name": "EXTERNAL_BLOCKED",     "type": "hypothesis_type", "base_rate": 0.20, "risk_weight": 1.0, "description": "Progress is blocked waiting on someone or something external"},
-    {"name": "DECISION_PENDING",     "type": "hypothesis_type", "base_rate": 0.15, "risk_weight": 1.5, "description": "A significant decision needs to be made"},
-
-    {"name": "deadline_imminent",       "type": "signal", "description": "A hard deadline is within 7 days"},
-    {"name": "deadline_approaching",    "type": "signal", "description": "A deadline is within 30 days"},
-    {"name": "deadline_missed",         "type": "signal", "description": "A deadline has passed without resolution"},
-    {"name": "legal_exposure",          "type": "signal", "description": "Financial or legal exposure is active on this thread"},
-    {"name": "financial_exposure_high", "type": "signal", "description": "Financial exposure exceeds $50K"},
-    {"name": "email_unanswered",        "type": "signal", "description": "An outbound email has gone unanswered >5 days"},
-    {"name": "email_received_urgent",   "type": "signal", "description": "An email marked urgent or from legal/medical party"},
-    {"name": "external_party_silent",   "type": "signal", "description": "An external party (attorney, insurer, court) has not responded"},
-    {"name": "task_overdue",            "type": "signal", "description": "A task on this thread is past its due date"},
-    {"name": "task_stale",              "type": "signal", "description": "No activity on this thread for >14 days"},
-    {"name": "calendar_event_soon",     "type": "signal", "description": "A calendar event related to this thread is within 48h"},
-    {"name": "document_missing",        "type": "signal", "description": "A required document has not been filed or produced"},
-    {"name": "dependency_unresolved",   "type": "signal", "description": "A dependency blocking this thread is unresolved"},
-    {"name": "progress_stalled",        "type": "signal", "description": "Expected milestones have not been hit"},
-    {"name": "new_evidence_available",  "type": "signal", "description": "New information relevant to this thread has arrived"},
-    {"name": "counterparty_active",     "type": "signal", "description": "A counterparty (adversarial) has taken action"},
-    {"name": "health_symptom_active",   "type": "signal", "description": "An active health symptom or condition relevant to this thread"},
-    {"name": "appointment_upcoming",    "type": "signal", "description": "A medical or professional appointment is upcoming"},
-    {"name": "deployment_issue",        "type": "signal", "description": "A technical system has an error or degraded state"},
-    {"name": "pr_open_stale",           "type": "signal", "description": "A GitHub PR or issue has been open >7 days without merge"},
-    {"name": "kb_item_referenced",      "type": "signal", "description": "A KB item on this thread was recently accessed"},
-    {"name": "thread_resolved",         "type": "signal", "description": "Clear evidence that the thread concern is resolved"},
-    {"name": "response_received",       "type": "signal", "description": "A response from an external party has been received"}
-  ],
-
-  "relations": [
-
-    {"signal": "deadline_imminent",       "hypothesis": "URGENT_ACTION_NEEDED",  "llr_pos": 3.0,  "llr_neg": -0.5, "info_gain": 2.5},
-    {"signal": "deadline_missed",         "hypothesis": "URGENT_ACTION_NEEDED",  "llr_pos": 3.5,  "llr_neg": -1.0, "info_gain": 3.0},
-    {"signal": "email_received_urgent",   "hypothesis": "URGENT_ACTION_NEEDED",  "llr_pos": 2.0,  "llr_neg": -0.3, "info_gain": 1.5},
-    {"signal": "counterparty_active",     "hypothesis": "URGENT_ACTION_NEEDED",  "llr_pos": 2.5,  "llr_neg": -0.2, "info_gain": 2.0},
-    {"signal": "calendar_event_soon",     "hypothesis": "URGENT_ACTION_NEEDED",  "llr_pos": 1.5,  "llr_neg": -0.2, "info_gain": 1.0},
-    {"signal": "task_overdue",            "hypothesis": "URGENT_ACTION_NEEDED",  "llr_pos": 1.5,  "llr_neg": -0.3, "info_gain": 1.0},
-    {"signal": "thread_resolved",         "hypothesis": "URGENT_ACTION_NEEDED",  "llr_pos": -3.0, "llr_neg": 0.1,  "info_gain": 2.0},
-
-    {"signal": "dependency_unresolved",   "hypothesis": "BINDING_CONSTRAINT",    "llr_pos": 2.5,  "llr_neg": -0.5, "info_gain": 2.0},
-    {"signal": "progress_stalled",        "hypothesis": "BINDING_CONSTRAINT",    "llr_pos": 2.0,  "llr_neg": -0.5, "info_gain": 1.5},
-    {"signal": "external_party_silent",   "hypothesis": "BINDING_CONSTRAINT",    "llr_pos": 1.5,  "llr_neg": -0.3, "info_gain": 1.0},
-    {"signal": "document_missing",        "hypothesis": "BINDING_CONSTRAINT",    "llr_pos": 2.0,  "llr_neg": -0.3, "info_gain": 1.5},
-    {"signal": "thread_resolved",         "hypothesis": "BINDING_CONSTRAINT",    "llr_pos": -2.5, "llr_neg": 0.1,  "info_gain": 1.5},
-
-    {"signal": "legal_exposure",          "hypothesis": "AT_RISK",               "llr_pos": 2.5,  "llr_neg": -1.0, "info_gain": 2.0},
-    {"signal": "financial_exposure_high", "hypothesis": "AT_RISK",               "llr_pos": 2.5,  "llr_neg": -0.5, "info_gain": 2.0},
-    {"signal": "deadline_imminent",       "hypothesis": "AT_RISK",               "llr_pos": 1.5,  "llr_neg": -0.3, "info_gain": 1.0},
-    {"signal": "email_unanswered",        "hypothesis": "AT_RISK",               "llr_pos": 1.5,  "llr_neg": -0.5, "info_gain": 1.0},
-    {"signal": "counterparty_active",     "hypothesis": "AT_RISK",               "llr_pos": 2.0,  "llr_neg": -0.2, "info_gain": 1.5},
-    {"signal": "document_missing",        "hypothesis": "AT_RISK",               "llr_pos": 1.5,  "llr_neg": -0.3, "info_gain": 1.0},
-    {"signal": "external_party_silent",   "hypothesis": "AT_RISK",               "llr_pos": 1.0,  "llr_neg": -0.2, "info_gain": 0.8},
-    {"signal": "thread_resolved",         "hypothesis": "AT_RISK",               "llr_pos": -3.0, "llr_neg": 0.1,  "info_gain": 2.0},
-    {"signal": "response_received",       "hypothesis": "AT_RISK",               "llr_pos": -1.0, "llr_neg": 0.3,  "info_gain": 0.8},
-
-    {"signal": "task_stale",              "hypothesis": "STALE_THREAD",          "llr_pos": 2.0,  "llr_neg": -1.0, "info_gain": 1.5},
-    {"signal": "kb_item_referenced",      "hypothesis": "STALE_THREAD",          "llr_pos": -1.5, "llr_neg": 0.5,  "info_gain": 1.0},
-    {"signal": "email_received_urgent",   "hypothesis": "STALE_THREAD",          "llr_pos": -2.0, "llr_neg": 0.3,  "info_gain": 1.5},
-    {"signal": "thread_resolved",         "hypothesis": "STALE_THREAD",          "llr_pos": 1.0,  "llr_neg": -0.5, "info_gain": 0.5},
-
-    {"signal": "new_evidence_available",  "hypothesis": "OPPORTUNITY",           "llr_pos": 1.5,  "llr_neg": -0.3, "info_gain": 1.0},
-    {"signal": "response_received",       "hypothesis": "OPPORTUNITY",           "llr_pos": 1.0,  "llr_neg": -0.2, "info_gain": 0.8},
-    {"signal": "deadline_approaching",    "hypothesis": "OPPORTUNITY",           "llr_pos": 1.0,  "llr_neg": -0.2, "info_gain": 0.7},
-
-    {"signal": "external_party_silent",   "hypothesis": "EXTERNAL_BLOCKED",      "llr_pos": 2.5,  "llr_neg": -1.0, "info_gain": 2.0},
-    {"signal": "email_unanswered",        "hypothesis": "EXTERNAL_BLOCKED",      "llr_pos": 2.0,  "llr_neg": -0.8, "info_gain": 1.5},
-    {"signal": "response_received",       "hypothesis": "EXTERNAL_BLOCKED",      "llr_pos": -3.0, "llr_neg": 0.5,  "info_gain": 2.0},
-
-    {"signal": "deadline_approaching",    "hypothesis": "DECISION_PENDING",      "llr_pos": 1.5,  "llr_neg": -0.3, "info_gain": 1.0},
-    {"signal": "dependency_unresolved",   "hypothesis": "DECISION_PENDING",      "llr_pos": 1.0,  "llr_neg": -0.2, "info_gain": 0.8},
-    {"signal": "new_evidence_available",  "hypothesis": "DECISION_PENDING",      "llr_pos": 1.0,  "llr_neg": -0.1, "info_gain": 0.8}
-  ],
-
-  "threads": [
-    {
-      "name": "MetLife Policy Investigation",
-      "domain": "estate",
-      "description": "Active investigation into potential MetLife policy on father's SSN. Certified letter sent Feb 26 2026. Response expected ~Mar 28.",
-      "initial_signals": ["legal_exposure", "financial_exposure_high", "external_party_silent", "deadline_approaching"]
-    },
-    {
-      "name": "Estate Inventory Deadline",
-      "domain": "estate",
-      "description": "90-day inventory due March 9 2026, Case 24PR316 Pueblo County CO. Properties at 714 W Capistrano and 1230 Mahren. Appraisals ordered.",
-      "initial_signals": ["deadline_imminent", "legal_exposure", "document_missing"]
-    },
-    {
-      "name": "Estate Fraud Investigation",
-      "domain": "estate",
-      "description": "Doreen and Sarah suspected of fraudulent access to father's insurance using hospital document obtained while he was on life support.",
-      "initial_signals": ["legal_exposure", "financial_exposure_high", "counterparty_active"]
-    },
-    {
-      "name": "Medical Malpractice — Renown",
-      "domain": "malpractice",
-      "description": "$430K Nevada cap case. Dr. Palacio missed ischial tuberosity rupture Jan 26 2025. Attorneys Jerry Mowbray + Don Nomura.",
-      "initial_signals": ["legal_exposure", "financial_exposure_high", "external_party_silent"]
-    },
-    {
-      "name": "MEL Cloud Deployment",
-      "domain": "MEL",
-      "description": "patient-talk-summary on ECS. 6 commits undeployed since Feb 15. Redis/escalation bug in production.",
-      "initial_signals": ["deployment_issue", "pr_open_stale", "progress_stalled"]
-    },
-    {
-      "name": "MEL Ontology Quality",
-      "domain": "MEL",
-      "description": "Relations table sparse. LLM scribe not yet passing structured evidence to ingestEvidence(). Binding constraint on clinical value.",
-      "initial_signals": ["binding_constraint_signal", "progress_stalled", "dependency_unresolved"]
-    },
-    {
-      "name": "Meniscus Tear Recovery",
-      "domain": "health",
-      "description": "3cm complex tear medial meniscus. PT with Ryan Maves. Watchful waiting path. Peptide therapy exploration.",
-      "initial_signals": ["health_symptom_active", "appointment_upcoming"]
-    },
-    {
-      "name": "Ridgeline L6 Promotion",
-      "domain": "ridgeline",
-      "description": "Targeting Principal PM (L6). Building external leverage: LinkedIn, advisory, open-source HEDGE.",
-      "initial_signals": ["opportunity", "task_stale"]
-    },
-    {
-      "name": "UnitedHealthcare Benefits Optimization",
-      "domain": "finance",
-      "description": "$2-4K annual value opportunity. FSA, OptumRx, Ways2Well superbills, Rally rewards.",
-      "initial_signals": ["opportunity"]
-    }
-  ]
+    "concepts": [
+        {
+            "name": "URGENT_ACTION_NEEDED",
+            "type": "hypothesis_type",
+            "base_rate": 0.15,
+            "risk_weight": 3.0,
+            "description": "This thread requires immediate action by Jordan"
+        },
+        {
+            "name": "BINDING_CONSTRAINT",
+            "type": "hypothesis_type",
+            "base_rate": 0.1,
+            "risk_weight": 2.5,
+            "description": "This thread is the bottleneck blocking progress on other things"
+        },
+        {
+            "name": "AT_RISK",
+            "type": "hypothesis_type",
+            "base_rate": 0.15,
+            "risk_weight": 2.0,
+            "description": "This thread is at risk of a bad outcome without intervention"
+        },
+        {
+            "name": "STALE_THREAD",
+            "type": "hypothesis_type",
+            "base_rate": 0.3,
+            "risk_weight": 0.5,
+            "description": "This thread has had no activity and may need attention or closure"
+        },
+        {
+            "name": "EXTERNAL_BLOCKED",
+            "type": "hypothesis_type",
+            "base_rate": 0.2,
+            "risk_weight": 1.0,
+            "description": "Progress is blocked waiting on someone or something external"
+        },
+        {
+            "name": "DECISION_PENDING",
+            "type": "hypothesis_type",
+            "base_rate": 0.15,
+            "risk_weight": 1.5,
+            "description": "A significant decision needs to be made"
+        },
+        {
+            "name": "OPPORTUNITY_ACTIVE",
+            "type": "hypothesis_type",
+            "base_rate": 0.15,
+            "risk_weight": 1.5,
+            "description": "A concrete, time-sensitive opportunity exists on this thread — window is open now"
+        },
+        {
+            "name": "OPPORTUNITY_EMERGING",
+            "type": "hypothesis_type",
+            "base_rate": 0.2,
+            "risk_weight": 1.0,
+            "description": "Positive signals are accumulating but the opportunity is not yet fully formed — monitor and prepare"
+        },
+        {
+            "name": "OPPORTUNITY_CLOSED",
+            "type": "hypothesis_type",
+            "base_rate": 0.1,
+            "risk_weight": 0.5,
+            "description": "An opportunity on this thread has passed or been captured — thread may be closeable"
+        },
+        {
+            "name": "deadline_imminent",
+            "type": "signal",
+            "description": "A hard deadline is within 7 days"
+        },
+        {
+            "name": "deadline_approaching",
+            "type": "signal",
+            "description": "A deadline is within 30 days"
+        },
+        {
+            "name": "deadline_missed",
+            "type": "signal",
+            "description": "A deadline has passed without resolution"
+        },
+        {
+            "name": "legal_exposure",
+            "type": "signal",
+            "description": "Financial or legal exposure is active on this thread"
+        },
+        {
+            "name": "financial_exposure_high",
+            "type": "signal",
+            "description": "Financial exposure exceeds $50K"
+        },
+        {
+            "name": "email_unanswered",
+            "type": "signal",
+            "description": "An outbound email has gone unanswered >5 days"
+        },
+        {
+            "name": "email_received_urgent",
+            "type": "signal",
+            "description": "An email marked urgent or from legal/medical party"
+        },
+        {
+            "name": "external_party_silent",
+            "type": "signal",
+            "description": "An external party (attorney, insurer, court) has not responded"
+        },
+        {
+            "name": "task_overdue",
+            "type": "signal",
+            "description": "A task on this thread is past its due date"
+        },
+        {
+            "name": "task_stale",
+            "type": "signal",
+            "description": "No activity on this thread for >14 days"
+        },
+        {
+            "name": "calendar_event_soon",
+            "type": "signal",
+            "description": "A calendar event related to this thread is within 48h"
+        },
+        {
+            "name": "document_missing",
+            "type": "signal",
+            "description": "A required document has not been filed or produced"
+        },
+        {
+            "name": "dependency_unresolved",
+            "type": "signal",
+            "description": "A dependency blocking this thread is unresolved"
+        },
+        {
+            "name": "progress_stalled",
+            "type": "signal",
+            "description": "Expected milestones have not been hit"
+        },
+        {
+            "name": "new_evidence_available",
+            "type": "signal",
+            "description": "New information relevant to this thread has arrived"
+        },
+        {
+            "name": "counterparty_active",
+            "type": "signal",
+            "description": "A counterparty (adversarial) has taken action"
+        },
+        {
+            "name": "health_symptom_active",
+            "type": "signal",
+            "description": "An active health symptom or condition relevant to this thread"
+        },
+        {
+            "name": "appointment_upcoming",
+            "type": "signal",
+            "description": "A medical or professional appointment is upcoming"
+        },
+        {
+            "name": "deployment_issue",
+            "type": "signal",
+            "description": "A technical system has an error or degraded state"
+        },
+        {
+            "name": "pr_open_stale",
+            "type": "signal",
+            "description": "A GitHub PR or issue has been open >7 days without merge"
+        },
+        {
+            "name": "kb_item_referenced",
+            "type": "signal",
+            "description": "A KB item on this thread was recently accessed"
+        },
+        {
+            "name": "thread_resolved",
+            "type": "signal",
+            "description": "Clear evidence that the thread concern is resolved"
+        },
+        {
+            "name": "response_received",
+            "type": "signal",
+            "description": "A response from an external party has been received"
+        },
+        {
+            "name": "milestone_achieved",
+            "type": "signal",
+            "description": "A meaningful milestone or deliverable on this thread has been completed"
+        },
+        {
+            "name": "positive_signal_received",
+            "type": "signal",
+            "description": "An explicitly positive development (favorable ruling, offer, approval, test result)"
+        }
+    ],
+    "relations": [
+        {
+            "signal": "deadline_imminent",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 3.0,
+            "llr_neg": -0.5,
+            "half_life_hours": 168,
+            "info_gain": 2.5,
+            "_note": "deadline_imminent decays over ~1 week once the deadline passes"
+        },
+        {
+            "signal": "deadline_missed",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 3.5,
+            "llr_neg": -1.0,
+            "half_life_hours": 72,
+            "info_gain": 3.0,
+            "_note": "missed deadline urgency peaks then fades as situation is addressed"
+        },
+        {
+            "signal": "email_received_urgent",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 2.0,
+            "llr_neg": -0.3,
+            "half_life_hours": 48,
+            "info_gain": 1.5,
+            "_note": "urgent email loses relevance within 2 days if addressed"
+        },
+        {
+            "signal": "counterparty_active",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 2.5,
+            "llr_neg": -0.2,
+            "half_life_hours": 72,
+            "info_gain": 2.0
+        },
+        {
+            "signal": "calendar_event_soon",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 1.5,
+            "llr_neg": -0.2,
+            "half_life_hours": 48,
+            "info_gain": 1.0,
+            "_note": "calendar urgency evaporates after the event"
+        },
+        {
+            "signal": "task_overdue",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 336,
+            "info_gain": 1.0,
+            "_note": "overdue tasks decay slowly — still relevant if still overdue"
+        },
+        {
+            "signal": "deployment_issue",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 2.0,
+            "llr_neg": -0.5,
+            "half_life_hours": 24,
+            "info_gain": 1.8,
+            "_note": "deployment fires decay fast — either fixed or escalated within a day"
+        },
+        {
+            "signal": "thread_resolved",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": -3.0,
+            "llr_neg": 0.1,
+            "half_life_hours": 0,
+            "info_gain": 2.0
+        },
+        {
+            "signal": "dependency_unresolved",
+            "hypothesis": "BINDING_CONSTRAINT",
+            "llr_pos": 2.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 0,
+            "info_gain": 2.0,
+            "_note": "structural constraints don't decay — unresolved stays unresolved"
+        },
+        {
+            "signal": "progress_stalled",
+            "hypothesis": "BINDING_CONSTRAINT",
+            "llr_pos": 2.0,
+            "llr_neg": -0.5,
+            "half_life_hours": 336,
+            "info_gain": 1.5,
+            "_note": "stall signal decays over 2 weeks — progress may have resumed"
+        },
+        {
+            "signal": "external_party_silent",
+            "hypothesis": "BINDING_CONSTRAINT",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 168,
+            "info_gain": 1.0
+        },
+        {
+            "signal": "document_missing",
+            "hypothesis": "BINDING_CONSTRAINT",
+            "llr_pos": 2.0,
+            "llr_neg": -0.3,
+            "half_life_hours": 0,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "deployment_issue",
+            "hypothesis": "BINDING_CONSTRAINT",
+            "llr_pos": 1.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 24,
+            "info_gain": 1.2
+        },
+        {
+            "signal": "pr_open_stale",
+            "hypothesis": "BINDING_CONSTRAINT",
+            "llr_pos": 1.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 168,
+            "info_gain": 1.0,
+            "_note": "stale PRs decay over ~1 week — may have been merged or closed"
+        },
+        {
+            "signal": "thread_resolved",
+            "hypothesis": "BINDING_CONSTRAINT",
+            "llr_pos": -2.5,
+            "llr_neg": 0.1,
+            "half_life_hours": 0,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "legal_exposure",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 2.5,
+            "llr_neg": -1.0,
+            "half_life_hours": 0,
+            "info_gain": 2.0,
+            "_note": "legal exposure is structural — doesn't decay until resolved"
+        },
+        {
+            "signal": "financial_exposure_high",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 2.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 0,
+            "info_gain": 2.0
+        },
+        {
+            "signal": "deadline_imminent",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 168,
+            "info_gain": 1.0
+        },
+        {
+            "signal": "email_unanswered",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 1.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 168,
+            "info_gain": 1.0
+        },
+        {
+            "signal": "counterparty_active",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 2.0,
+            "llr_neg": -0.2,
+            "half_life_hours": 72,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "document_missing",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 0,
+            "info_gain": 1.0
+        },
+        {
+            "signal": "external_party_silent",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 1.0,
+            "llr_neg": -0.2,
+            "half_life_hours": 168,
+            "info_gain": 0.8
+        },
+        {
+            "signal": "health_symptom_active",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 1.5,
+            "llr_neg": -0.8,
+            "half_life_hours": 336,
+            "info_gain": 1.2,
+            "_note": "active symptoms decay over 2 weeks — may have improved"
+        },
+        {
+            "signal": "thread_resolved",
+            "hypothesis": "AT_RISK",
+            "llr_pos": -3.0,
+            "llr_neg": 0.1,
+            "half_life_hours": 0,
+            "info_gain": 2.0
+        },
+        {
+            "signal": "response_received",
+            "hypothesis": "AT_RISK",
+            "llr_pos": -1.0,
+            "llr_neg": 0.3,
+            "half_life_hours": 72,
+            "info_gain": 0.8
+        },
+        {
+            "signal": "task_stale",
+            "hypothesis": "STALE_THREAD",
+            "llr_pos": 2.0,
+            "llr_neg": -1.0,
+            "half_life_hours": 336,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "kb_item_referenced",
+            "hypothesis": "STALE_THREAD",
+            "llr_pos": -1.5,
+            "llr_neg": 0.5,
+            "half_life_hours": 48,
+            "info_gain": 1.0,
+            "_note": "KB reference is a recency signal — decays fast"
+        },
+        {
+            "signal": "email_received_urgent",
+            "hypothesis": "STALE_THREAD",
+            "llr_pos": -2.0,
+            "llr_neg": 0.3,
+            "half_life_hours": 48,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "thread_resolved",
+            "hypothesis": "STALE_THREAD",
+            "llr_pos": 1.0,
+            "llr_neg": -0.5,
+            "half_life_hours": 0,
+            "info_gain": 0.5
+        },
+        {
+            "signal": "appointment_upcoming",
+            "hypothesis": "STALE_THREAD",
+            "llr_pos": -1.5,
+            "llr_neg": 0.3,
+            "half_life_hours": 48,
+            "info_gain": 1.0,
+            "_note": "upcoming appointment is strong evidence thread is NOT stale"
+        },
+        {
+            "signal": "external_party_silent",
+            "hypothesis": "EXTERNAL_BLOCKED",
+            "llr_pos": 2.5,
+            "llr_neg": -1.0,
+            "half_life_hours": 168,
+            "info_gain": 2.0
+        },
+        {
+            "signal": "email_unanswered",
+            "hypothesis": "EXTERNAL_BLOCKED",
+            "llr_pos": 2.0,
+            "llr_neg": -0.8,
+            "half_life_hours": 168,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "response_received",
+            "hypothesis": "EXTERNAL_BLOCKED",
+            "llr_pos": -3.0,
+            "llr_neg": 0.5,
+            "half_life_hours": 72,
+            "info_gain": 2.0
+        },
+        {
+            "signal": "deadline_approaching",
+            "hypothesis": "DECISION_PENDING",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 168,
+            "info_gain": 1.0
+        },
+        {
+            "signal": "dependency_unresolved",
+            "hypothesis": "DECISION_PENDING",
+            "llr_pos": 1.0,
+            "llr_neg": -0.2,
+            "half_life_hours": 0,
+            "info_gain": 0.8
+        },
+        {
+            "signal": "new_evidence_available",
+            "hypothesis": "DECISION_PENDING",
+            "llr_pos": 1.0,
+            "llr_neg": -0.1,
+            "half_life_hours": 72,
+            "info_gain": 0.8
+        },
+        {
+            "signal": "appointment_upcoming",
+            "hypothesis": "DECISION_PENDING",
+            "llr_pos": 1.5,
+            "llr_neg": -0.2,
+            "half_life_hours": 48,
+            "info_gain": 1.0,
+            "_note": "upcoming appointment implies a decision point is near"
+        },
+        {
+            "signal": "health_symptom_active",
+            "hypothesis": "DECISION_PENDING",
+            "llr_pos": 1.0,
+            "llr_neg": -0.3,
+            "half_life_hours": 336,
+            "info_gain": 0.8
+        },
+        {
+            "signal": "response_received",
+            "hypothesis": "DECISION_PENDING",
+            "llr_pos": 1.5,
+            "llr_neg": -0.2,
+            "half_life_hours": 72,
+            "info_gain": 1.2,
+            "_note": "a response often crystallizes what the decision is"
+        },
+        {
+            "signal": "new_evidence_available",
+            "hypothesis": "OPPORTUNITY_ACTIVE",
+            "llr_pos": 1.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 72,
+            "info_gain": 1.2,
+            "_note": "new evidence can open an opportunity window — decays fast if not acted on"
+        },
+        {
+            "signal": "response_received",
+            "hypothesis": "OPPORTUNITY_ACTIVE",
+            "llr_pos": 2.0,
+            "llr_neg": -0.3,
+            "half_life_hours": 72,
+            "info_gain": 1.5,
+            "_note": "a favorable response directly opens a window"
+        },
+        {
+            "signal": "positive_signal_received",
+            "hypothesis": "OPPORTUNITY_ACTIVE",
+            "llr_pos": 2.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 168,
+            "info_gain": 2.0
+        },
+        {
+            "signal": "milestone_achieved",
+            "hypothesis": "OPPORTUNITY_ACTIVE",
+            "llr_pos": 2.0,
+            "llr_neg": -0.3,
+            "half_life_hours": 168,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "deadline_approaching",
+            "hypothesis": "OPPORTUNITY_ACTIVE",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 168,
+            "info_gain": 1.0,
+            "_note": "approaching deadline means act-now window is open"
+        },
+        {
+            "signal": "appointment_upcoming",
+            "hypothesis": "OPPORTUNITY_ACTIVE",
+            "llr_pos": 1.5,
+            "llr_neg": -0.2,
+            "half_life_hours": 48,
+            "info_gain": 1.0,
+            "_note": "an upcoming appointment is often the opportunity itself"
+        },
+        {
+            "signal": "thread_resolved",
+            "hypothesis": "OPPORTUNITY_ACTIVE",
+            "llr_pos": -2.0,
+            "llr_neg": 0.1,
+            "half_life_hours": 0,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "deadline_missed",
+            "hypothesis": "OPPORTUNITY_ACTIVE",
+            "llr_pos": -2.5,
+            "llr_neg": 0.2,
+            "half_life_hours": 0,
+            "info_gain": 2.0,
+            "_note": "missed deadline closes the window"
+        },
+        {
+            "signal": "new_evidence_available",
+            "hypothesis": "OPPORTUNITY_EMERGING",
+            "llr_pos": 2.0,
+            "llr_neg": -0.5,
+            "half_life_hours": 168,
+            "info_gain": 1.5
+        },
+        {
+            "signal": "response_received",
+            "hypothesis": "OPPORTUNITY_EMERGING",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 168,
+            "info_gain": 1.2
+        },
+        {
+            "signal": "kb_item_referenced",
+            "hypothesis": "OPPORTUNITY_EMERGING",
+            "llr_pos": 1.0,
+            "llr_neg": -0.2,
+            "half_life_hours": 72,
+            "info_gain": 0.8,
+            "_note": "active KB engagement suggests emerging thinking on an opportunity"
+        },
+        {
+            "signal": "positive_signal_received",
+            "hypothesis": "OPPORTUNITY_EMERGING",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 336,
+            "info_gain": 1.2
+        },
+        {
+            "signal": "progress_stalled",
+            "hypothesis": "OPPORTUNITY_EMERGING",
+            "llr_pos": -1.5,
+            "llr_neg": 0.3,
+            "half_life_hours": 168,
+            "info_gain": 1.0,
+            "_note": "stall is evidence the opportunity hasn't crystallized yet"
+        },
+        {
+            "signal": "health_symptom_active",
+            "hypothesis": "OPPORTUNITY_EMERGING",
+            "llr_pos": 1.0,
+            "llr_neg": -0.5,
+            "half_life_hours": 336,
+            "info_gain": 0.8,
+            "_note": "active symptom can signal an emerging treatment opportunity"
+        },
+        {
+            "signal": "milestone_achieved",
+            "hypothesis": "OPPORTUNITY_CLOSED",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 0,
+            "info_gain": 1.2,
+            "_note": "milestones suggest the opportunity was captured"
+        },
+        {
+            "signal": "thread_resolved",
+            "hypothesis": "OPPORTUNITY_CLOSED",
+            "llr_pos": 2.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 0,
+            "info_gain": 2.0
+        },
+        {
+            "signal": "deadline_missed",
+            "hypothesis": "OPPORTUNITY_CLOSED",
+            "llr_pos": 2.0,
+            "llr_neg": -0.3,
+            "half_life_hours": 0,
+            "info_gain": 1.5,
+            "_note": "missed deadline often closes an opportunity permanently"
+        },
+        {
+            "signal": "progress_stalled",
+            "hypothesis": "OPPORTUNITY_CLOSED",
+            "llr_pos": 1.0,
+            "llr_neg": -0.5,
+            "half_life_hours": 336,
+            "info_gain": 0.8
+        },
+        {
+            "signal": "deployment_issue",
+            "hypothesis": "AT_RISK",
+            "llr_pos": 1.5,
+            "llr_neg": -0.3,
+            "half_life_hours": 24,
+            "info_gain": 1.2
+        },
+        {
+            "signal": "pr_open_stale",
+            "hypothesis": "STALE_THREAD",
+            "llr_pos": 1.5,
+            "llr_neg": -0.5,
+            "half_life_hours": 168,
+            "info_gain": 1.0
+        },
+        {
+            "signal": "pr_open_stale",
+            "hypothesis": "DECISION_PENDING",
+            "llr_pos": 1.0,
+            "llr_neg": -0.3,
+            "half_life_hours": 168,
+            "info_gain": 0.8,
+            "_note": "stale PR implies a merge decision is needed"
+        },
+        {
+            "signal": "health_symptom_active",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 1.0,
+            "llr_neg": -0.5,
+            "half_life_hours": 336,
+            "info_gain": 0.8,
+            "_note": "active symptom can escalate to urgent if worsening"
+        },
+        {
+            "signal": "appointment_upcoming",
+            "hypothesis": "URGENT_ACTION_NEEDED",
+            "llr_pos": 1.0,
+            "llr_neg": -0.2,
+            "half_life_hours": 48,
+            "info_gain": 0.8,
+            "_note": "upcoming appointment may require urgent prep"
+        }
+    ],
+    "threads": [
+        {
+            "name": "MetLife Policy Investigation",
+            "domain": "estate",
+            "description": "Active investigation into potential MetLife policy on father's SSN. Certified letter sent Feb 26 2026. Response expected ~Mar 28.",
+            "initial_signals": [
+                "legal_exposure",
+                "financial_exposure_high",
+                "external_party_silent",
+                "deadline_approaching"
+            ]
+        },
+        {
+            "name": "Estate Inventory Deadline",
+            "domain": "estate",
+            "description": "90-day inventory due March 9 2026, Case 24PR316 Pueblo County CO. Properties at 714 W Capistrano and 1230 Mahren. Appraisals ordered.",
+            "initial_signals": [
+                "deadline_imminent",
+                "legal_exposure",
+                "document_missing"
+            ]
+        },
+        {
+            "name": "Estate Fraud Investigation",
+            "domain": "estate",
+            "description": "Doreen and Sarah suspected of fraudulent access to father's insurance using hospital document obtained while he was on life support.",
+            "initial_signals": [
+                "legal_exposure",
+                "financial_exposure_high",
+                "counterparty_active"
+            ]
+        },
+        {
+            "name": "Medical Malpractice \u2014 Renown",
+            "domain": "malpractice",
+            "description": "$430K Nevada cap case. Dr. Palacio missed ischial tuberosity rupture Jan 26 2025. Attorneys Jerry Mowbray + Don Nomura.",
+            "initial_signals": [
+                "legal_exposure",
+                "financial_exposure_high",
+                "external_party_silent"
+            ]
+        },
+        {
+            "name": "MEL Cloud Deployment",
+            "domain": "MEL",
+            "description": "patient-talk-summary on ECS. 6 commits undeployed since Feb 15. Redis/escalation bug in production.",
+            "initial_signals": [
+                "deployment_issue",
+                "pr_open_stale",
+                "progress_stalled"
+            ]
+        },
+        {
+            "name": "MEL Ontology Quality",
+            "domain": "MEL",
+            "description": "Relations table sparse. LLM scribe not yet passing structured evidence to ingestEvidence(). Binding constraint on clinical value.",
+            "initial_signals": [
+                "progress_stalled",
+                "dependency_unresolved"
+            ]
+        },
+        {
+            "name": "Meniscus Tear Recovery",
+            "domain": "health",
+            "description": "3cm complex tear medial meniscus. PT with Ryan Maves. Watchful waiting path. Peptide therapy exploration.",
+            "initial_signals": [
+                "health_symptom_active",
+                "appointment_upcoming"
+            ]
+        },
+        {
+            "name": "Ridgeline L6 Promotion",
+            "domain": "ridgeline",
+            "description": "Targeting Principal PM (L6). Building external leverage: LinkedIn, advisory, open-source HEDGE.",
+            "initial_signals": [
+                "task_stale",
+                "progress_stalled"
+            ]
+        },
+        {
+            "name": "UnitedHealthcare Benefits Optimization",
+            "domain": "finance",
+            "description": "$2-4K annual value opportunity. FSA, OptumRx, Ways2Well superbills, Rally rewards.",
+            "initial_signals": [
+                "deadline_approaching",
+                "new_evidence_available"
+            ]
+        }
+    ]
 }

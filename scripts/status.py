@@ -19,6 +19,10 @@ HYPOTHESIS_EMOJI = {
     "EXTERNAL_BLOCKED":     "📬",
     "STALE_THREAD":         "💤",
     "DECISION_PENDING":     "🤔",
+    "OPPORTUNITY_ACTIVE":   "✨",
+    "OPPORTUNITY_EMERGING": "🌱",
+    "OPPORTUNITY_CLOSED":   "🔒",
+    # legacy — will drain from DB over time
     "OPPORTUNITY":          "✨",
 }
 

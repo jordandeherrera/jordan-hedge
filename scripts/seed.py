@@ -52,16 +52,19 @@ def seed():
             logger.warning(f"  Skipping relation: {r['signal']} → {r['hypothesis']} (concept not found)")
             continue
 
+        # INSERT OR REPLACE so re-seeding updates LLRs and half-life values
         conn.execute("""
-            INSERT OR IGNORE INTO relations
-                (signal_concept_id, hypothesis_concept_id, llr_pos, llr_neg, expected_info_gain)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO relations
+                (signal_concept_id, hypothesis_concept_id, llr_pos, llr_neg,
+                 expected_info_gain, evidence_half_life_hours)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
             signal["id"],
             hypothesis["id"],
             r["llr_pos"],
             r["llr_neg"],
             r.get("info_gain", 0.0),
+            r.get("half_life_hours", 0),
         ))
     conn.commit()
     logger.info(f"  {len(seed_data['relations'])} relations seeded")
@@ -86,6 +89,7 @@ def seed():
         thread_id = thread["id"]
 
         # Create one hypothesis per hypothesis_type for this thread
+        # INSERT OR IGNORE so existing hypotheses (with accumulated evidence) are preserved
         for ht in hypothesis_types:
             log_odds_prior = prob_to_logit(ht["base_rate"])
             conn.execute("""

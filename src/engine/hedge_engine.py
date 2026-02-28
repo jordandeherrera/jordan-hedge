@@ -498,10 +498,20 @@ class HedgeEngine:
                 "title": f"🤔 Decision Needed: {t['name']}",
                 "description": f"'{t['name']}' has a pending decision (P={hyp.probability:.0%}). Gather remaining evidence and decide.",
             },
-            "OPPORTUNITY": {
+            "OPPORTUNITY_ACTIVE": {
+                "type": "decide",
+                "title": f"✨ Act Now: {t['name']}",
+                "description": f"'{t['name']}' has an open opportunity window (P={hyp.probability:.0%}). Act before it closes.",
+            },
+            "OPPORTUNITY_EMERGING": {
                 "type": "research",
-                "title": f"✨ Opportunity: {t['name']}",
-                "description": f"'{t['name']}' shows opportunity signals (P={hyp.probability:.0%}). Review and act while window is open.",
+                "title": f"🌱 Emerging: {t['name']}",
+                "description": f"'{t['name']}' shows accumulating positive signals (P={hyp.probability:.0%}). Monitor and prepare to act.",
+            },
+            "OPPORTUNITY_CLOSED": {
+                "type": "follow_up",
+                "title": f"🔒 Close or Archive: {t['name']}",
+                "description": f"'{t['name']}' opportunity appears resolved or passed (P={hyp.probability:.0%}). Review for closure.",
             },
         }
 
