@@ -3,20 +3,29 @@ Dispatcher: executes a story spec via ralph-loop subprocess.
 
 Returns a DispatchResult with outcome, stdout/stderr, and exit code.
 The result feeds back into HEDGE via feedback.py.
+
+Monitoring: spawns a RalphMonitor daemon thread that:
+  - Writes a PID/state file on startup
+  - Polls liveness every 15s
+  - Detects stalls (no output for 120s) and logs a warning + kill hint
+  - Updates state file on completion/failure
 """
 
 import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from .monitor import RalphMonitor
 
 RALPH_LOOP = os.environ.get(
     'RALPH_LOOP_BIN',
     '/home/ubuntu/prd-orchestrator/bin/ralph-loop'
 )
 CLAUDE_CLI = os.environ.get(
-    'CLAUDE_BIN',
+    'CLAUDE_CLI_BIN',
     '/home/ubuntu/prd-orchestrator/bin/claude-cli'
 )
 
@@ -37,7 +46,6 @@ class DispatchResult:
 
     @property
     def outcome_signal(self) -> str:
-        """Signal concept to ingest back into HEDGE."""
         return 'task_complete' if self.success else 'task_failed'
 
     @property
@@ -47,14 +55,20 @@ class DispatchResult:
         return f"RALPH failed after {self.elapsed_seconds:.0f}s: {self.error_summary}"
 
 
-def dispatch(spec: dict, dry_run: bool = False, max_iterations: int = 5) -> DispatchResult:
+def dispatch(
+    spec: dict,
+    dry_run: bool = False,
+    max_iterations: int = 5,
+    stall_timeout_s: int = 120,
+) -> DispatchResult:
     """
     Run ralph-loop with the given story spec.
 
     Args:
-        spec: story spec from story_gen.build_story_spec()
-        dry_run: if True, print the story but don't execute
-        max_iterations: RALPH max review cycles
+        spec:            story spec from story_gen.build_story_spec()
+        dry_run:         print story but don't execute
+        max_iterations:  RALPH max review cycles
+        stall_timeout_s: seconds of silence before flagging as stalled
     """
     story = spec['story']
     working_dir = spec['working_dir']
@@ -104,45 +118,75 @@ def dispatch(spec: dict, dry_run: bool = False, max_iterations: int = 5) -> Disp
         'RALPH_AI_TIMEOUT': '180',
     }
 
-    # Pass validators if specified
     validators = spec.get('validators', [])
     if validators:
         env['RALPH_VALIDATORS'] = ','.join(validators)
 
     print(f"\n{'='*60}")
-    print(f"[DISPATCH] Thread: {thread_name}")
+    print(f"[DISPATCH] Thread:      {thread_name}")
     print(f"[DISPATCH] Working dir: {working_dir}")
     print(f"[DISPATCH] Story preview: {story[:120]}...")
+    print(f"[DISPATCH] Stall timeout: {stall_timeout_s}s")
     print(f"{'='*60}\n")
 
     start = time.time()
+    monitor: RalphMonitor | None = None
 
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [RALPH_LOOP, '-y', story],
             cwd=working_dir,
             env=env,
-            capture_output=False,   # stream to terminal
-            timeout=600,            # 10 min max per story
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
         )
+
+        # Attach monitor (daemon thread — won't block process exit)
+        monitor = RalphMonitor(
+            proc=proc,
+            thread_name=thread_name,
+            working_dir=working_dir,
+            story=story,
+            stall_timeout_s=stall_timeout_s,
+        )
+        monitor_thread = threading.Thread(target=monitor.start, daemon=True)
+        monitor_thread.start()
+
+        # Stream output to terminal and track liveness
+        all_output = []
+        for line in proc.stdout:
+            print(line, end='', flush=True)
+            all_output.append(line)
+            monitor.touch_output()
+
+        proc.wait()
+        monitor.stop()
+        monitor_thread.join(timeout=5)
+
         elapsed = time.time() - start
-        success = result.returncode == 0
+        success = proc.returncode == 0
 
         # Parse iterations from .ralph/plan.json if available
         iterations = _parse_iterations(working_dir)
 
-        # Extract error summary from stderr if failed
         error_summary = ''
         if not success:
-            error_summary = f"Exit code {result.returncode}"
+            # Pull last few lines as error hint
+            tail = ''.join(all_output[-10:]).strip()
+            error_summary = f"Exit {proc.returncode}: {tail[-200:]}" if tail else f"Exit {proc.returncode}"
+
+        # Finalize monitor state
+        monitor._finalize('complete' if success else 'failed', proc.returncode)
 
         return DispatchResult(
             thread_id=thread_id,
             thread_name=thread_name,
             story=story,
             working_dir=working_dir,
-            exit_code=result.returncode,
-            stdout='',
+            exit_code=proc.returncode,
+            stdout=''.join(all_output),
             stderr='',
             elapsed_seconds=elapsed,
             success=success,
@@ -152,6 +196,8 @@ def dispatch(spec: dict, dry_run: bool = False, max_iterations: int = 5) -> Disp
 
     except subprocess.TimeoutExpired:
         elapsed = time.time() - start
+        if monitor:
+            monitor.kill(reason='timeout')
         return DispatchResult(
             thread_id=thread_id,
             thread_name=thread_name,
@@ -159,14 +205,24 @@ def dispatch(spec: dict, dry_run: bool = False, max_iterations: int = 5) -> Disp
             working_dir=working_dir,
             exit_code=124,
             stdout='',
-            stderr='Timed out after 600s',
+            stderr='Timed out',
             elapsed_seconds=elapsed,
             success=False,
             error_summary='RALPH timed out (>10 min)',
         )
 
+    except KeyboardInterrupt:
+        elapsed = time.time() - start
+        print(f"\n[DISPATCH] Interrupted — killing Ralph worker...")
+        if monitor:
+            monitor.kill(reason='keyboard interrupt')
+            monitor.cleanup()
+        raise
+
     except Exception as e:
         elapsed = time.time() - start
+        if monitor:
+            monitor.kill(reason=str(e))
         return DispatchResult(
             thread_id=thread_id,
             thread_name=thread_name,
@@ -182,7 +238,6 @@ def dispatch(spec: dict, dry_run: bool = False, max_iterations: int = 5) -> Disp
 
 
 def _parse_iterations(working_dir: str) -> int:
-    """Parse iteration count from RALPH's plan.json if it exists."""
     import json
     plan_path = Path(working_dir) / '.ralph' / 'plan.json'
     if plan_path.exists():

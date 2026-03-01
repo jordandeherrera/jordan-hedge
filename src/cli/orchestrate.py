@@ -43,6 +43,7 @@ from src.orchestrator.convergence import get_dispatch_candidates
 from src.orchestrator.story_gen import build_story_spec
 from src.orchestrator.dispatcher import dispatch
 from src.orchestrator.feedback import ingest_result
+from src.orchestrator.monitor import print_worker_status, kill_worker, kill_all_workers
 
 
 def print_candidates(candidates):
@@ -56,7 +57,8 @@ def print_candidates(candidates):
     print(f"{'='*70}")
     for i, c in enumerate(candidates, 1):
         print(f"\n  [{i}] {c.thread_name}")
-        print(f"      Priority: {c.priority_score:.0f}  |  Confidence: {c.confidence:.0%}")
+        print(f"      Priority: {c.priority_score:.0f}  |  Confidence: {c.confidence:.0%}  |  Topic: {c.research_topic or '?'}")
+        print(f"      Dir:      {c.working_dir or '(cwd)'}")
         print(f"      Action:   {c.next_action}")
         if c.context:
             ctx_preview = c.context[:120].replace('\n', ' ')
@@ -90,8 +92,30 @@ def main():
                         help='RALPH max iterations (default: 5)')
     parser.add_argument('--no-feedback', action='store_true',
                         help='Skip ingesting result back into HEDGE')
+    parser.add_argument('--workers', action='store_true',
+                        help='Show status of all Ralph worker processes')
+    parser.add_argument('--kill', metavar='THREAD',
+                        help='Kill the Ralph worker for the named thread (+ cleanup)')
+    parser.add_argument('--kill-all', action='store_true',
+                        help='Kill all running Ralph workers and clean up sandboxes')
+    parser.add_argument('--stall-timeout', type=int, default=120,
+                        help='Seconds of silence before flagging worker as stalled (default: 120)')
 
     args = parser.parse_args()
+
+    # Worker management commands — don't need the HEDGE engine
+    if args.workers:
+        print_worker_status()
+        return 0
+
+    if args.kill:
+        success = kill_worker(args.kill)
+        return 0 if success else 1
+
+    if args.kill_all:
+        n = kill_all_workers()
+        print(f"[MONITOR] Killed {n} worker(s).")
+        return 0
 
     # Load engine
     print("\n[ORCHESTRATOR] Loading HEDGE engine...")
@@ -151,11 +175,20 @@ def main():
             return 1
 
         candidate = candidates[dispatch_idx]
+
+        # Prefer --dir override; else use auto-resolved working_dir from convergence
+        working_dir = args.dir if args.dir != os.getcwd() else (candidate.working_dir or args.dir)
         print(f"[ORCHESTRATOR] Generating story for: {candidate.thread_name}")
-        spec = build_story_spec(candidate, args.dir)
+        print(f"[ORCHESTRATOR] Working dir: {working_dir}")
+        spec = build_story_spec(candidate, working_dir)
 
     # Dispatch
-    result = dispatch(spec, dry_run=args.dry_run, max_iterations=args.max_iter)
+    result = dispatch(
+        spec,
+        dry_run=args.dry_run,
+        max_iterations=args.max_iter,
+        stall_timeout_s=args.stall_timeout,
+    )
 
     # Feedback
     if not args.dry_run and not args.no_feedback:

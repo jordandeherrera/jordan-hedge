@@ -32,25 +32,75 @@ def generate_story_prompt(candidate: DispatchCandidate, working_dir: str) -> str
     return _template_story(candidate, working_dir)
 
 
+def _get_repo_context(working_dir: str) -> str:
+    """Pull lightweight repo context to ground the story in actual files."""
+    import os
+    lines = []
+
+    # Recent git log
+    try:
+        result = subprocess.run(
+            ['git', 'log', '--oneline', '-8'],
+            cwd=working_dir, capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            lines.append(f"Recent commits:\n{result.stdout.strip()}")
+    except Exception:
+        pass
+
+    # Top-level file structure
+    try:
+        entries = []
+        for name in sorted(os.listdir(working_dir)):
+            if name.startswith('.'):
+                continue
+            full = os.path.join(working_dir, name)
+            entries.append(name + ('/' if os.path.isdir(full) else ''))
+        if entries:
+            lines.append(f"Repo layout: {', '.join(entries[:20])}")
+    except Exception:
+        pass
+
+    # Package.json or pyproject for stack info
+    for meta_file in ['package.json', 'pyproject.toml', 'Makefile']:
+        meta_path = os.path.join(working_dir, meta_file)
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path) as f:
+                    content = f.read(600)
+                lines.append(f"{meta_file} (excerpt):\n{content}")
+                break
+            except Exception:
+                pass
+
+    return '\n\n'.join(lines)
+
+
 def _llm_synthesize_story(candidate: DispatchCandidate, working_dir: str) -> str:
     """Use claude-cli to write a focused, implementation-ready RALPH story."""
+    repo_context = _get_repo_context(working_dir)
+
     meta_prompt = f"""You are converting a HEDGE reasoning thread into a RALPH implementation story.
 
 HEDGE Thread: {candidate.thread_name}
 Priority Score: {candidate.priority_score:.0f}
+Research Topic: {getattr(candidate, 'research_topic', '') or 'unknown'}
 Next Action: {candidate.next_action}
 Context:
 {candidate.context}
 
 Working directory: {working_dir}
 
+Repo context (use this to write grounded, accurate acceptance criteria):
+{repo_context}
+
 Write a RALPH story: a concise, implementation-ready task description.
 Requirements:
 - Start with the specific action (Fix / Build / Deploy / Configure)
-- Include concrete acceptance criteria as a numbered list
-- Reference specific files, endpoints, or commands where relevant
-- Scope to what can be verified programmatically (tests, curl, file checks)
-- Max 200 words
+- Use the actual repo structure above — reference real files/scripts/commands that exist
+- Include concrete acceptance criteria as a numbered list (verifiable by CLI/test)
+- Scope to what a coding agent can do autonomously in this directory
+- Max 250 words
 - No preamble, no "here is the story:" — just the story itself
 
 Output only the story text."""
