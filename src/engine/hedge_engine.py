@@ -312,6 +312,10 @@ class HedgeEngine:
             if not thread:
                 return []
 
+            # Skip action generation for threads in waiting/delegated states
+            if dict(thread).get("status") in ("watching", "paused", "resolved"):
+                return []
+
             hypotheses = self._get_hypotheses(conn, thread["id"])
             if not hypotheses:
                 return []
