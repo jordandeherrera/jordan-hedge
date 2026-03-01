@@ -92,6 +92,8 @@ def main():
                         help='RALPH max iterations (default: 5)')
     parser.add_argument('--no-feedback', action='store_true',
                         help='Skip ingesting result back into HEDGE')
+    parser.add_argument('--story', metavar='TEXT',
+                        help='Override the LLM-generated story with a hand-crafted one')
     parser.add_argument('--workers', action='store_true',
                         help='Show status of all Ralph worker processes')
     parser.add_argument('--kill', metavar='THREAD',
@@ -181,6 +183,8 @@ def main():
         print(f"[ORCHESTRATOR] Generating story for: {candidate.thread_name}")
         print(f"[ORCHESTRATOR] Working dir: {working_dir}")
         spec = build_story_spec(candidate, working_dir)
+        if args.story:
+            spec['story'] = args.story
 
     # Dispatch
     result = dispatch(

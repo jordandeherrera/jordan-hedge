@@ -27,7 +27,7 @@ def ingest_result(engine, result: DispatchResult) -> None:
     note = result.outcome_note
 
     signal = SignalItem(
-        concept=concept,
+        signal_name=concept,
         value='present',
         confidence=confidence,
         source='ralph_loop',
@@ -51,7 +51,7 @@ def ingest_result(engine, result: DispatchResult) -> None:
     # so it surfaces again in the next convergence cycle
     if not result.success:
         stale_signal = SignalItem(
-            concept='task_stale',
+            signal_name='task_stale',
             value='present',
             confidence=0.7,
             source='ralph_loop',
