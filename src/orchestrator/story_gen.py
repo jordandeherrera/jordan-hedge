@@ -102,6 +102,7 @@ Requirements:
 - Scope to what a coding agent can do autonomously in this directory
 - NEVER use "npm run test --workspaces" or "npm test --workspaces" — these hit unrelated pre-existing failures in docs/legacy packages; instead scope tests to specific packages e.g. "npm test --workspace=packages/backend"
 - NEVER require full eslint on the whole repo — scope to changed files or skip if not relevant to the task
+- Each acceptance criterion must be verifiable with a specific shell command (not "check X" but "run Y and confirm Z")
 - Max 250 words
 - No preamble, no "here is the story:" — just the story itself
 
