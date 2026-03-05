@@ -608,6 +608,32 @@ class HedgeEngine:
             conn.close()
 
     # ─────────────────────────────────────────────
+    # BCVT INTEGRATION
+    # ─────────────────────────────────────────────
+
+    def get_bcvt_vector(self, thread_name: str, run_id: str = None):
+        """
+        Build and return a BCVTVector for a thread.
+
+        Each bit = 1 if the hypothesis has converged (resolution_state != 'open').
+        firstFailure = the minimum sufficient intervention point.
+
+        This is the HEDGE → BCVT handoff:
+          HEDGE accumulates evidence along the sigmoid →
+          When posterior crosses llr_support/contradict threshold →
+          resolution_state flips from 'open' to 'supported'/'contradicted' →
+          bit emits as 1 →
+          BCVTVector firstFailure advances.
+
+        Returns None if thread not found.
+        """
+        from src.orchestrator.bcvt import build_vector_from_thread
+        state = self.get_thread_state(thread_name)
+        if not state:
+            return None
+        return build_vector_from_thread(state, run_id=run_id)
+
+    # ─────────────────────────────────────────────
     # HEALTH CHECK
     # ─────────────────────────────────────────────
 

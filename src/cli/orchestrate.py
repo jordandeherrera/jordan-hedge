@@ -63,6 +63,14 @@ def print_candidates(candidates):
         if c.context:
             ctx_preview = c.context[:120].replace('\n', ' ')
             print(f"      Context:  {ctx_preview}...")
+        # BCVT state
+        if getattr(c, 'bcvt_vector', None) is not None:
+            v = c.bcvt_vector.vector
+            ff = c.bcvt_vector.first_failure
+            bits = "".join(str(b) for b in v)
+            target = c.target_hypothesis or '?'
+            print(f"      BCVT:     [{', '.join(str(b) for b in v)}] ({bits})"
+                  f"  firstFailure=node_{ff} ({target})")
     print(f"\n{'='*70}\n")
 
 
@@ -190,9 +198,24 @@ def main():
         stall_timeout_s=args.stall_timeout,
     )
 
-    # Feedback
+    # Feedback — pass spec for BCVT vector comparison
     if not args.dry_run and not args.no_feedback:
-        ingest_result(engine, result)
+        feedback = ingest_result(engine, result, spec=spec)
+
+        # Print BCVT comparison if available
+        cmp = feedback.get('bcvt_comparison')
+        if cmp:
+            print(f"\n{'─'*60}")
+            print(f"  BCVT ITERATION RESULT")
+            print(f"{'─'*60}")
+            print(f"  Prior vector:  {cmp['prior_vector']}")
+            print(f"  Post  vector:  {cmp['posterior_vector']}")
+            print(f"  Outcome:       {cmp['outcome'].upper()}")
+            print(f"  Explanation:   {cmp['explanation']}")
+            print(f"  Next action:   {cmp['action']}")
+            if cmp['bits_flipped']:
+                print(f"  Bits flipped:  {cmp['bits_flipped']}")
+            print(f"{'─'*60}\n")
 
     # Summary
     print(f"\n{'='*60}")

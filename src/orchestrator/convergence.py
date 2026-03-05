@@ -133,6 +133,10 @@ class DispatchCandidate:
     confidence: float          # 0-1: how confident we are it's implementable
     working_dir: str = ''      # resolved working directory for RALPH
     research_topic: str = ''   # from thread metadata
+    # BCVT integration — set by get_dispatch_candidates() when available
+    bcvt_vector: object = None    # BCVTVector | None
+    target_node_index: int = -1   # firstFailure index (-1 = not computed)
+    target_hypothesis: str = ''   # hypothesis type at firstFailure
 
 
 def resolve_working_dir(thread_name: str, fallback: str = '') -> str:
@@ -303,6 +307,20 @@ def get_dispatch_candidates(
 
         working_dir = resolve_working_dir(thread.name)
 
+        # Build BCVT vector for this thread — identifies firstFailure (the target node)
+        # so story_gen can write acceptance criteria derived from the hypothesis state
+        bcvt_vector = None
+        target_node_index = -1
+        target_hypothesis = ''
+        try:
+            from src.orchestrator.bcvt import build_vector_from_thread
+            bcvt_vector = build_vector_from_thread(thread)
+            target_node_index = bcvt_vector.first_failure
+            if bcvt_vector.target_probe:
+                target_hypothesis = bcvt_vector.target_probe.hypothesis_type
+        except Exception:
+            pass  # BCVT is optional — dispatch proceeds without it
+
         candidates.append(DispatchCandidate(
             thread_name=thread.name,
             thread_id=getattr(thread, 'id', thread.name),
@@ -312,6 +330,9 @@ def get_dispatch_candidates(
             confidence=confidence,
             working_dir=working_dir,
             research_topic=research_topic,
+            bcvt_vector=bcvt_vector,
+            target_node_index=target_node_index,
+            target_hypothesis=target_hypothesis,
         ))
 
     candidates.sort(key=lambda c: c.priority_score, reverse=True)
