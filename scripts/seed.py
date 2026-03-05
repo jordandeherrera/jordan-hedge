@@ -75,6 +75,29 @@ def seed():
         "SELECT id, name, base_rate FROM concepts WHERE type = 'hypothesis_type'"
     ).fetchall()
 
+    # Per-type thresholds — calibrated to risk_weight and action latency:
+    #   URGENT_ACTION_NEEDED:  2.0  — act early, false negative > false positive
+    #   BINDING_CONSTRAINT:    2.5  — must be confident before declaring THE bottleneck
+    #   AT_RISK:               2.5  — standard
+    #   STALE_THREAD:          2.0  — low stakes, easy to act
+    #   EXTERNAL_BLOCKED:      2.0  — want to follow up early
+    #   DECISION_PENDING:      2.5  — standard
+    #   OPPORTUNITY_ACTIVE:    1.5  — act fast; missing a window is costly
+    #   OPPORTUNITY_EMERGING:  2.0  — monitor mode
+    #   OPPORTUNITY_CLOSED:    2.0  — low stakes to archive
+    # Anything else: DEFAULT_LLR_SUPPORT_THRESHOLD = 3.0
+    HYPOTHESIS_THRESHOLDS = {
+        "URGENT_ACTION_NEEDED": (2.0, -2.0),
+        "BINDING_CONSTRAINT":   (2.5, -2.5),
+        "AT_RISK":              (2.5, -2.5),
+        "STALE_THREAD":         (2.0, -2.0),
+        "EXTERNAL_BLOCKED":     (2.0, -2.0),
+        "DECISION_PENDING":     (2.5, -2.5),
+        "OPPORTUNITY_ACTIVE":   (1.5, -1.5),
+        "OPPORTUNITY_EMERGING": (2.0, -2.0),
+        "OPPORTUNITY_CLOSED":   (2.0, -2.0),
+    }
+
     for t in seed_data["threads"]:
         # Insert thread
         conn.execute("""
@@ -89,14 +112,24 @@ def seed():
         thread_id = thread["id"]
 
         # Create one hypothesis per hypothesis_type for this thread
-        # INSERT OR IGNORE so existing hypotheses (with accumulated evidence) are preserved
+        # INSERT OR IGNORE so existing hypotheses (with accumulated evidence) are preserved.
+        # Thresholds come from the concept definition in seed.json (set per hypothesis type).
+        # UPDATE the threshold columns even on IGNORE so existing rows get thresholds
+        # if they were previously seeded without them (backfill via ON CONFLICT DO UPDATE).
         for ht in hypothesis_types:
             log_odds_prior = prob_to_logit(ht["base_rate"])
+            support, contradict = HYPOTHESIS_THRESHOLDS.get(ht["name"], (3.0, -3.0))
             conn.execute("""
-                INSERT OR IGNORE INTO hypotheses
-                    (thread_id, hypothesis_type_id, log_odds_prior, log_odds_posterior)
-                VALUES (?, ?, ?, ?)
-            """, (thread_id, ht["id"], log_odds_prior, log_odds_prior))
+                INSERT INTO hypotheses
+                    (thread_id, hypothesis_type_id, log_odds_prior, log_odds_posterior,
+                     llr_support_threshold, llr_contradict_threshold)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(thread_id, hypothesis_type_id) DO UPDATE SET
+                    llr_support_threshold    = COALESCE(excluded.llr_support_threshold,
+                                                        hypotheses.llr_support_threshold),
+                    llr_contradict_threshold = COALESCE(excluded.llr_contradict_threshold,
+                                                        hypotheses.llr_contradict_threshold)
+            """, (thread_id, ht["id"], log_odds_prior, log_odds_prior, support, contradict))
 
         conn.commit()
 

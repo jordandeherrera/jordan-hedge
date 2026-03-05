@@ -398,14 +398,21 @@ class HedgeEngine:
         return row
 
     def _get_hypotheses(self, conn, thread_id: int, status: str = 'active') -> list[HypothesisResult]:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT
                 h.*,
                 c.name as hypothesis_type,
                 c.risk_weight,
                 logit_to_prob(h.log_odds_posterior) as probability,
                 belief_entropy(h.log_odds_posterior) as entropy,
-                uncertainty(h.log_odds_posterior) as uncertainty_score
+                uncertainty(h.log_odds_posterior) as uncertainty_score,
+                -- Materialize defaults so HypothesisResult never sees NULL thresholds.
+                -- COALESCE here instead of in Python keeps the values consistent between
+                -- the Python layer and the SQL COALESCE in get_resolved_hypotheses().
+                COALESCE(h.llr_support_threshold,    {DEFAULT_LLR_SUPPORT_THRESHOLD})
+                    AS llr_support_threshold,
+                COALESCE(h.llr_contradict_threshold, {DEFAULT_LLR_CONTRADICT_THRESHOLD})
+                    AS llr_contradict_threshold
             FROM hypotheses h
             JOIN concepts c ON c.id = h.hypothesis_type_id
             WHERE h.thread_id = ? AND h.status = ?
@@ -445,13 +452,17 @@ class HedgeEngine:
                     c.risk_weight,
                     logit_to_prob(h.log_odds_posterior) as probability,
                     belief_entropy(h.log_odds_posterior) as entropy,
-                    uncertainty(h.log_odds_posterior) as uncertainty_score
+                    uncertainty(h.log_odds_posterior) as uncertainty_score,
+                    COALESCE(h.llr_support_threshold,    {DEFAULT_LLR_SUPPORT_THRESHOLD})
+                        AS llr_support_threshold,
+                    COALESCE(h.llr_contradict_threshold, {DEFAULT_LLR_CONTRADICT_THRESHOLD})
+                        AS llr_contradict_threshold
                 FROM hypotheses h
                 JOIN concepts c ON c.id = h.hypothesis_type_id
                 WHERE h.thread_id = ?
                   AND h.status = 'active'
                   AND (
-                    h.log_odds_posterior >= COALESCE(h.llr_support_threshold, {DEFAULT_LLR_SUPPORT_THRESHOLD})
+                    h.log_odds_posterior >= COALESCE(h.llr_support_threshold,    {DEFAULT_LLR_SUPPORT_THRESHOLD})
                     OR
                     h.log_odds_posterior <= COALESCE(h.llr_contradict_threshold, {DEFAULT_LLR_CONTRADICT_THRESHOLD})
                   )
